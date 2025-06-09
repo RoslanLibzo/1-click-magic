@@ -2,20 +2,33 @@ const express = require('express');
 const multer = require('multer');
 const { google } = require('googleapis');
 const dotenv = require('dotenv');
-const fs = require('fs');
 const open = require('open');
-const fetch = require('node-fetch');
 const { URLSearchParams } = require('url');
 const axios = require('axios');
 const FormData = require('form-data');
 const fs = require('fs');
+const path = require('path');
+const mime = require('mime-types');
+
+// const storage = multer.diskStorage({
+//   destination: 'uploads/',
+//   filename: (req, file, cb) => {
+//     const filename = `video-${Date.now()}.mp4`;
+//     console.log('Saving file as:', filename);
+//     cb(null, filename);
+//   }
+// });
+const upload = multer({ destination: 'uploads/' });
 
 dotenv.config();
 const app = express();
 const PORT = 3000;
 
-// Storage setup for uploads
-const upload = multer({ dest: 'uploads/' });
+
+
+
+
+
 
 // OAuth2 setup
 const oauth2Client = new google.auth.OAuth2(
@@ -117,29 +130,40 @@ app.listen(PORT, () => {
 
 
 // FACEBOOK ENDPOINT
-
-
-
 app.post('/upload-facebook', upload.single('video'), async (req, res) => {
+
   const pageId = process.env.FB_PAGE_ID;
   const pageAccessToken = process.env.FB_PAGE_ACCESS_TOKEN;
   const { title, description } = req.body;
   const videoPath = req.file.path;
+  console.log(pageAccessToken);
 
   try {
+
+     
+
+    
     const form = new FormData();
-    form.append('title', title);
-    form.append('description', description);
-    form.append('source', fs.createReadStream(videoPath));
-    form.append('access_token', pageAccessToken);
+    form.set('title', title);
+    form.set('description', description);
+    form.set('source', fs.createReadStream(videoPath));
+    form.set('published', 'true');
+    form.set('access_token', pageAccessToken);
+    form.submit('https://graph-video.facebook.com/v23.0/589279137611733/videos', (err, res) => {
+      if (err) return console.error(err);
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => console.log('Response:', data));
+    });
 
-    const response = await axios.post(
-      `https://graph.facebook.com/v15.0/${pageId}/videos`,
-      form,
-      { headers: form.getHeaders() }
-    );
+    const data = await response.json();
 
-    res.send(`Facebook upload queued! Video ID: ${response.data.id}`);
+    if (data.id) {
+      res.send(`Facebook upload queued! Video ID: ${data.id}`);
+    } else {
+      console.error('Facebook Upload Error:', data);
+      res.status(500).send(`Facebook upload failed: ${JSON.stringify(data)}`);
+    }
   } catch (error) {
     console.error('Facebook Upload Error:', error.response?.data || error.message);
     res.status(500).send('Facebook upload failed');
